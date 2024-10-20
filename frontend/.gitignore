@@ -6,13 +6,12 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-src/components/Chatbot/.env
 ../backend/node_modules
 node_modules
 dist
 dist-ssr
 *.local
-frontend\src\components\Chatbot\.env
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -23,3 +22,4 @@ frontend\src\components\Chatbot\.env
 *.njsproj
 *.sln
 *.sw?
+src/components/Chatbot/.env
