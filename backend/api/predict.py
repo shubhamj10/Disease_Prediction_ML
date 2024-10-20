@@ -1,100 +1,109 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
+import time
 import pickle
-import json
-import re
+import numpy as np
+from openai import OpenAI
 import os
 from dotenv import load_dotenv
-from flask_cors import CORS
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.prompts import PromptTemplate
 
-app = Flask(__name__)
-CORS(app)
-
-# Load environment variables
 load_dotenv()
-GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
+app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 
-base_dir = os.path.dirname(os.path.abspath(__file__))
-model_path = os.path.join(base_dir, 'final_rf_model.pkl')
+# Ensure you set your OpenAI API key as an environment variable
+API_KEY = os.getenv("OPENAI_API_KEY")
+ # Use environment variable for security
+client = OpenAI(api_key=API_KEY)
 
-# Load the trained disease prediction model
-with open(model_path, 'rb') as f:
-    disease_model = pickle.load(f)
+ASSISTANT_ID = os.getenv("ASSISTANT_ID")
+ASSISTANT_ID2 = os.getenv("ASSISTANT_ID2")
 
-# Load the encoder used during training (assuming it's OneHotEncoder)
-with open(os.path.join(base_dir, 'encoder.pkl'), 'rb') as f:
-    encoder = pickle.load(f)
 
-# Initialize the language model for symptom extraction
-llm = ChatGoogleGenerativeAI(model='gemini-pro', google_api_key=GOOGLE_API_KEY)
+# Load your pkl model and data dictionary
+with open('final_rf_model.pkl', 'rb') as model_file:
+    model = pickle.load(model_file)
 
-# Define the list of possible symptoms
-symptom_list = [
-    "fever", "cough", "fatigue", "shortness of breath", "headache",
-    "muscle aches", "sore throat", "loss of taste", "nausea", "vomiting",
-    "diarrhea", "chills", "congestion", "runny nose", "body aches",
-    "rash", "joint pain"
-]
+with open('data_dict.pkl', 'rb') as dict_file:
+    data_dict = pickle.load(dict_file)
 
-# Create a prompt template for symptom extraction
-prompt_template = PromptTemplate(
-    input_variables=["query"],
-    template=(
-        "Given the query: '{query}', extract the symptoms from the following list and return them in valid JSON format:\n"
-        "Symptom List: {symptom_list}\n"
-        "Output should be in the following format:\n"
-        '{{ "symptoms": ["symptom1", "symptom2", ...] }}'
+def predictDisease(symptoms):
+    symptoms = symptoms.split(",")
+    
+    # Creating input data for the model
+    input_data = [0] * len(data_dict["symptom_index"])
+    for symptom in symptoms:
+        index = data_dict["symptom_index"].get(symptom.strip(), None)
+        if index is not None:
+            input_data[index] = 1
+
+    # Reshaping the input data
+    input_data = np.array(input_data).reshape(1, -1)
+
+    # Generating prediction using the Random Forest model
+    rf_prediction = data_dict["predictions_classes"][model.predict(input_data)[0]]
+  
+    return rf_prediction
+
+@app.route('/api/chat', methods=['POST'])
+def chat():
+    user_input = request.json.get('description', '')
+
+    # Create a thread with the user message.
+    thread = client.beta.threads.create(
+        messages=[
+            {
+                "role": "user",
+                "content": user_input,
+            }
+        ]
     )
-)
 
-def extract_symptoms(description):
-    prompt = prompt_template.format(query=description, symptom_list=', '.join(symptom_list))
-    print(f"Prompt sent to the model: {prompt}")
+    # Submit the thread to the assistant (as a new run).
+    run = client.beta.threads.runs.create(thread_id=thread.id, assistant_id=ASSISTANT_ID)
+     
+      # Wait for run to complete.
+    while run.status != "completed":
+        run = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
+        time.sleep(1)
+
+    # Get the latest message from the thread.
+    message_response = client.beta.threads.messages.list(thread_id=thread.id)
+    messages = message_response.data
+
+    latest_message = messages[0]
+    response_content = latest_message.content[0].text.value
+    print(response_content)
+    predicted_disease = predictDisease(response_content)
+    # Pass the symptoms to the predictDisease function
     
-    result = llm.invoke(prompt)
+    thread2 = client.beta.threads.create(
+        messages=[
+            {
+                "role": "user",
+                "content": predicted_disease,
+            }
+        ]
+    )
+
+
+    run2 = client.beta.threads.runs.create(thread_id=thread2.id, assistant_id=ASSISTANT_ID2) 
     
-    print(f"Model Response: {result.content}")
+    while run2.status != "completed":
+        run2 = client.beta.threads.runs.retrieve(thread_id=thread2.id, run_id=run2.id)
+        time.sleep(1)
+    message_response2 = client.beta.threads.messages.list(thread_id=thread2.id)
+    messages2 = message_response2.data
 
-    try:
-        raw_json = result.content.strip()
-        print(f"Raw JSON Response: {raw_json}")
-        raw_json = raw_json.replace("'", '"')
-        raw_json = re.sub(r'(\w+):', r'"\1":', raw_json)
-        symptoms = json.loads(raw_json)
-        return symptoms.get("symptoms", [])
-    except (json.JSONDecodeError, ValueError) as e:
-        print(f"Failed to parse JSON: {raw_json}, Error: {str(e)}")
-        return []
+    latest_message2 = messages2[0]
+    response_content2 = latest_message2.content[0].text.value
 
-@app.route('/predict', methods=['POST'])
-def predict():
-    data = request.json
-    description = data.get('description')
 
-    if not description:
-        return jsonify({"error": "Description is required"}), 400
-
-    symptoms = extract_symptoms(description)
-
-    # Handle empty symptoms list
-    if not symptoms:
-        return jsonify({"error": "No valid symptoms extracted"}), 400
-
-    try:
-        # Transform the symptoms into a format suitable for the model
-        symptoms_encoded = encoder.transform([symptoms])  # This will create a 2D array
-
-        # Ensure to flatten the array only when calling predict
-        symptoms_flat = symptoms_encoded.toarray()  # This keeps it as 2D
-        print(f"Encoded Symptoms Shape: {symptoms_encoded.shape}")  # Log the shape of the 2D array
-
-        # Make the prediction with the correct input shape
-        predicted_disease = disease_model.predict(symptoms_flat)  # Pass the 2D array directly
-
-        return jsonify({'predicted_disease': predicted_disease[0]})
-    except Exception as e:
-        return jsonify({"error": "Prediction failed: " + str(e)}), 500
-
+    # second_assistant_response = thread2['choices'][0]['message']['content']
+    print(f"/n/n Response from 1st Assistant - {response_content}")
+    print(f"/n/n response from the disease prediction model - {predicted_disease}")
+    print(f"/n/n Response from the 2nd Assistant - {response_content2}")
+    return jsonify({"response": response_content2})
+    
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=3000)
+    app.run(debug=True)

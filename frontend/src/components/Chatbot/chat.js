@@ -1,9 +1,10 @@
-// const express = require('express');
 import express from 'express';
 import bodyParser from 'body-parser';
 import cors from 'cors';
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
+
+
 dotenv.config();
 
 
@@ -13,8 +14,22 @@ app.use(bodyParser.json());
 
 // OpenAI API configuration
 const openai = new OpenAI({
-  apiKey:process.env.OPENAI_API_KEY, // Replace with your OpenAI API key
+  apiKey: process.env.OPENAI_API_KEY, // Make sure to set your OpenAI API key in a .env file
 });
+
+// Create a health assistant prompt template
+const createHealthPrompt = (userMessage) => {
+  return [
+    {
+      role: 'system',
+      content: "You are a health assistant designed to provide information about medical conditions, symptoms, and general health advice. Your responses should be accurate, informative, and empathetic. If a question is outside your expertise, suggest consulting a healthcare professional.",
+    },
+    {
+      role: 'user',
+      content: userMessage,
+    },
+  ];
+};
 
 // API endpoint
 app.post('/api/chat', async (req, res) => {
@@ -22,8 +37,8 @@ app.post('/api/chat', async (req, res) => {
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo', // or any other available model
-      messages: [{ role: 'user', content: userMessage }],
+      model: 'gpt-3.5-turbo',
+      messages: createHealthPrompt(userMessage), // Use the prompt template
     });
 
     // Get the reply and format it
@@ -34,7 +49,6 @@ app.post('/api/chat', async (req, res) => {
     res.json({ reply: "I'm sorry, something went wrong. Please try again later." });
   }
 });
-
 
 // Start the server
 const PORT = 5001;

@@ -5,7 +5,7 @@ import { FaComments } from 'react-icons/fa';
 function Chatbot() {
   const [userInput, setUserInput] = useState('');
   const [messages, setMessages] = useState([
-    { text: 'Welcome! How can I assist you?', sender: 'bot' },
+    { text: 'Welcome! How can I assist you? Please ask any medical related query', sender: 'bot' },
   ]);
   const [isOpen, setIsOpen] = useState(false);
   const [isTyping, setIsTyping] = useState(false); // New state for typing
