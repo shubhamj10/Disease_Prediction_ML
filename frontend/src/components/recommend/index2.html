@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Find Hospitals</title>
+    <script src="script.js?v=2" defer></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCFVrM6rcMEhOGEo0uc9Ko-XbwPvdgHRqw&libraries=places&callback=initMap" defer></script>
+
+    
+    <script>
+        let map;
+        let service;
+        let userMarker;
+
+        function initMap() {
+            map = new google.maps.Map(document.getElementById("map"), {
+                center: { lat: 20.5937, lng: 78.9629 }, // Default center (India)
+                zoom: 5,
+                styles: [
+                    { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] }, // Hide unnecessary labels
+                    { featureType: "poi.medical", elementType: "labels", stylers: [{ visibility: "on" }] } // Show hospital labels
+                ]
+            });
+        }
+
+        function searchHospitals() {
+            const locationInput = document.getElementById("location").value;
+            const geocoder = new google.maps.Geocoder();
+
+            if (!locationInput) {
+                alert("Please enter a location.");
+                return;
+            }
+
+            // Clear previous results
+            document.getElementById("hospital-list").innerHTML = "<p>Searching hospitals...</p>";
+
+            // Convert location name to coordinates
+            geocoder.geocode({ address: locationInput }, function(results, status) {
+                if (status === "OK") {
+                    const userLocation = results[0].geometry.location;
+                    map.setCenter(userLocation);
+                    map.setZoom(14);
+
+                    // Add user location marker
+                    if (userMarker) userMarker.setMap(null);
+                    userMarker = new google.maps.Marker({
+                        position: userLocation,
+                        map: map,
+                        title: "User Location",
+                        icon: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png"
+                    });
+
+                    // Find hospitals within 5 km
+                    service = new google.maps.places.PlacesService(map);
+                    service.nearbySearch({
+                        location: userLocation,
+                        radius: 5000, // 5 km radius
+                        type: ["hospital"]
+                    }, function(results, status) {
+                        if (status === google.maps.places.PlacesServiceStatus.OK) {
+                            let hospitalListHTML = "<h3>Hospitals within 5 km:</h3><ul>";
+                            const bounds = new google.maps.LatLngBounds();
+                            bounds.extend(userLocation);
+
+                            results.forEach(place => {
+                                // Ensure we have a valid name & address
+                                const name = place.name || "Unknown Hospital";
+                                const address = place.vicinity || "Address not available";
+
+                                // Add hospital to the list
+                                hospitalListHTML += `<li><strong>${name}</strong> - ${address}</li>`;
+
+                                // Add marker on the map
+                                new google.maps.Marker({
+                                    position: place.geometry.location,
+                                    map: map,
+                                    title: name
+                                });
+
+                                bounds.extend(place.geometry.location);
+                            });
+
+                            hospitalListHTML += "</ul>";
+                            document.getElementById("hospital-list").innerHTML = hospitalListHTML;
+
+                            // Adjust zoom to fit hospitals within 5 km
+                            map.fitBounds(bounds);
+                            google.maps.event.addListenerOnce(map, "bounds_changed", function() {
+                                if (map.getZoom() > 14) map.setZoom(14); // Limit zoom-in
+                            });
+
+                        } else {
+                            document.getElementById("hospital-list").innerHTML = "<p>No hospitals found within 5 km.</p>";
+                        }
+                    });
+
+                } else {
+                    alert("Location not found. Please enter a valid location.");
+                }
+            });
+        }
+    </script>
+</head>
+<body onload="initMap()">
+    <h2>Find Hospitals Near a Location (5 km Radius)</h2>
+    <input type="text" id="location" placeholder="Enter location (e.g., Mumbai)">
+    <button onclick="searchHospitals()">Search</button>
+    <div id="map" style="width: 100%; height: 500px; margin-top: 10px;"></div>
+    <div id="hospital-list" style="margin-top: 20px; font-family: Arial, sans-serif;"></div>
+</body>
+</html>

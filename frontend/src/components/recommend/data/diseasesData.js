@@ -1,5 +1,38 @@
 const diseasesData = [
   {
+    "name": "Fever",
+    "prevention": [
+      "Stay hydrated.",
+      "Avoid excessive heat exposure.",
+      "Maintain good hygiene."
+    ],
+    "medicines": [
+      "Paracetamol",
+      "Ibuprofen"
+    ],
+    "homeRemedies": [
+      "Drink plenty of fluids.",
+      "Cold compress on the forehead."
+    ]
+  },
+  {
+    "name": "Headache",
+    "prevention": [
+      "Maintain a regular sleep schedule.",
+      "Stay hydrated.",
+      "Manage stress effectively."
+    ],
+    "medicines": [
+      "Paracetamol",
+      "Ibuprofen",
+      "Aspirin"
+    ],
+    "homeRemedies": [
+      "Peppermint oil on temples.",
+      "Ginger tea."
+    ]
+  },
+  {
     "name": "Fungal infection",
     "prevention": [
       "Keep skin dry and clean.",
@@ -625,4 +658,3 @@ const diseasesData = [
    
   //  module.exports = diseasesData;
   export default diseasesData;
-   
